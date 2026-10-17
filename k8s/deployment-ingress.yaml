@@ -1,0 +1,112 @@
+# =============================================================================
+# Kubernetes Manifest — Hospital Management System
+# Covers: Deployment (2 replicas), ClusterIP Service, Nginx Ingress
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hospital-app
+  namespace: default
+  labels:
+    app: hospital-app
+    version: "1.0.0"
+    environment: production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hospital-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: hospital-app
+    spec:
+      # SOC2: Never run containers as root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: hospital-app
+          image: krishnajune2000/hospital-app:latest
+          ports:
+            - containerPort: 8000
+          # Resource limits prevent noisy-neighbour CPU/memory issues
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          env:
+            - name: PORT
+              value: "8000"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: hospital-db-secret
+                  key: host
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: hospital-db-secret
+                  key: password
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hospital-app-svc
+  namespace: default
+spec:
+  selector:
+    app: hospital-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hospital-app-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Rate limiting (SOC2 / OWASP protection)
+    nginx.ingress.kubernetes.io/limit-rps: "20"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: devops.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hospital-app-svc
+                port:
+                  number: 80
