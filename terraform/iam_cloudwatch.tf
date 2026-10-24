@@ -29,9 +29,9 @@ resource "aws_iam_role_policy" "ec2_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "CloudWatchLogs"
-        Effect   = "Allow"
-        Action   = [
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents",
@@ -40,9 +40,9 @@ resource "aws_iam_role_policy" "ec2_policy" {
         Resource = "arn:aws:logs:*:*:*"
       },
       {
-        Sid      = "S3BackupWrite"
-        Effect   = "Allow"
-        Action   = [
+        Sid    = "S3BackupWrite"
+        Effect = "Allow"
+        Action = [
           "s3:PutObject",
           "s3:GetObject",
           "s3:ListBucket"
@@ -53,9 +53,9 @@ resource "aws_iam_role_policy" "ec2_policy" {
         ]
       },
       {
-        Sid      = "SSMAccess"
-        Effect   = "Allow"
-        Action   = [
+        Sid    = "SSMAccess"
+        Effect = "Allow"
+        Action = [
           "ssm:GetParameter",
           "ssm:GetParameters",
           "ssmmessages:CreateControlChannel",
@@ -80,7 +80,7 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 # ---------------------------------------------------------------------------
 resource "aws_cloudwatch_log_group" "app_logs" {
   name              = "/dckap/hospital-app"
-  retention_in_days = 30  # SOC2: 30-day log retention minimum
+  retention_in_days = 30 # SOC2: 30-day log retention minimum
   tags              = { Name = "dckap-app-logs" }
 }
 

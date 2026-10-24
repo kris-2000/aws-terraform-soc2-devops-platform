@@ -73,12 +73,12 @@ resource "aws_db_subnet_group" "mysql" {
 }
 
 resource "aws_db_instance" "mysql_rds" {
-  identifier             = "dckap-hospital-db"
-  engine                 = "mysql"
-  engine_version         = "8.0"
-  instance_class         = "db.t3.micro"
-  allocated_storage      = 20
-  max_allocated_storage  = 100  # auto-scaling up to 100GB
+  identifier            = "dckap-hospital-db"
+  engine                = "mysql"
+  engine_version        = "8.0"
+  instance_class        = "db.t3.micro"
+  allocated_storage     = 20
+  max_allocated_storage = 100 # auto-scaling up to 100GB
 
   db_name  = "hospital_db"
   username = "admin"
@@ -92,7 +92,7 @@ resource "aws_db_instance" "mysql_rds" {
 
   # Automated backups for 7 days (SOC2 backup policy)
   backup_retention_period = 7
-  backup_window           = "02:00-03:00"  # 2-3 AM UTC
+  backup_window           = "02:00-03:00" # 2-3 AM UTC
   maintenance_window      = "mon:04:00-mon:05:00"
 
   # Snapshot on delete (never lose prod data)
@@ -102,6 +102,6 @@ resource "aws_db_instance" "mysql_rds" {
   # Enable CloudWatch logs for audit (SOC2 logging requirement)
   enabled_cloudwatch_logs_exports = ["general", "error", "slowquery"]
 
-  deletion_protection = false  # set true in production
+  deletion_protection = false # set true in production
   tags                = { Name = "dckap-hospital-db" }
 }
