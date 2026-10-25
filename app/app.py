@@ -191,7 +191,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
       <div class="badge-soc2">
         <span class="badge-dot"></span>
-        AWS ALB Healthy &bull; SOC2 Type II Certified
+        AWS ALB Healthy &bull; Aligned with SOC 2 Security Controls
       </div>
     </header>
 

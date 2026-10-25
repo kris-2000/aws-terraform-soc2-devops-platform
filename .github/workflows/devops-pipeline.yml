@@ -62,6 +62,20 @@ jobs:
         run: terraform validate
         working-directory: terraform
 
+      - name: tfsec — Terraform Security & Compliance Scan
+        uses: aquasecurity/tfsec-action@master
+        with:
+          working_directory: terraform
+          soft_fail: true
+
+      - name: Checkov — Infrastructure Policy-as-Code Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          framework: terraform
+          directory: terraform
+          soft_fail: true
+          output_format: cli
+
   # ---------------------------------------------------------------------------
   # Stage 2: SonarQube Cloud Security Scan
   # ---------------------------------------------------------------------------
