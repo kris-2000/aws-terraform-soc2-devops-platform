@@ -232,6 +232,6 @@ aws-terraform-soc2-devops-platform/
 
 ## 👤 Author
 
-**Krishnaprasad June**
+**KRISHNA PRASAD S**
 * **GitHub:** [@kris-2000](https://github.com/kris-2000)
 * **Role Focus:** Cloud Engineering, DevOps (AWS, Terraform, Kubernetes, CI/CD, DevSecOps)
