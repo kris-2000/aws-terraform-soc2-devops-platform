@@ -1,237 +1,388 @@
-# Automated AWS Infrastructure & CI/CD Pipeline (SOC 2 Controls Baseline)
+"""
+Enterprise Hospital Management System - Web UI & REST API Workload.
+This app is a demo workload intended to illustrate DevSecOps and AWS cloud patterns.
+"""
+import base64
+import json
+import os
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-[![DevOps Pipeline](https://github.com/kris-2000/aws-terraform-soc2-devops-platform/actions/workflows/devops-pipeline.yml/badge.svg)](https://github.com/kris-2000/aws-terraform-soc2-devops-platform/actions)
-[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=kris-2000_aws-terraform-soc2-devops-platform&metric=alert_status)](https://sonarcloud.io/project/overview?id=kris-2000_aws-terraform-soc2-devops-platform)
-[![Terraform 1.6+](https://img.shields.io/badge/Terraform-1.6%2B-623CE4?logo=terraform&logoColor=white)](https://www.terraform.io/)
-[![Security Scanned](https://img.shields.io/badge/Security-tfsec%20%7C%20Checkov%20%7C%20Bandit-success)](https://github.com/kris-2000/aws-terraform-soc2-devops-platform/actions)
+PATIENTS = [
+    {"id": 1, "name": "Alice Sharma", "age": 34, "diagnosis": "Cardiology (Hypertension)", "room": "ICU-102", "status": "Stable"},
+    {"id": 2, "name": "Ravi Kumar", "age": 56, "diagnosis": "Endocrinology (Diabetes T2)", "room": "Ward-3A", "status": "Admitted"},
+    {"id": 3, "name": "Priya Nair", "age": 28, "diagnosis": "Pulmonology (Asthma)", "room": "Ward-2B", "status": "Observation"},
+    {"id": 4, "name": "Devanathan M", "age": 62, "diagnosis": "Neurology (Post-Op Check)", "room": "Suite-01", "status": "Recovering"},
+]
 
-A production-style cloud infrastructure platform provisioning an isolated multi-tier AWS architecture and automated CI/CD pipeline for a containerized Healthcare Management microservice.
+HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+  <title>CarePoint | Hospital Management System</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #111827;
+      --surface-border: #1f2937;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      padding: 32px 20px;
+      line-height: 1.5;
+    }
+    .container { max-width: 1000px; margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 16px;
+      border-bottom: 1px solid var(--surface-border);
+      padding-bottom: 20px;
+    }
+    .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .brand p { font-size: 13px; color: var(--text-muted); }
+    .badge-soc2 {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-dot { width: 8px; height: 8px; background: var(--success); border-radius: 50%; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .card { background: var(--surface); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: 20px; }
+    .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+    .card-value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+    .card-hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+    th { background: rgba(31, 41, 55, 0.5); color: var(--text-muted); font-weight: 600; padding: 12px 16px; border-bottom: 1px solid var(--surface-border); }
+    td { padding: 14px 16px; border-bottom: 1px solid var(--surface-border); }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+    .pill { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+    .pill-stable { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .pill-admitted { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+    .pill-obs { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .pill-rec { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+    .form-container { margin-top: 28px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) auto; gap: 12px; margin-top: 12px; }
+    input { background: #0b0f19; border: 1px solid var(--surface-border); border-radius: 8px; color: #fff; padding: 10px 14px; font-size: 13px; outline: none; transition: border 0.15s; }
+    input:focus { border-color: var(--primary); }
+    button { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.15s; }
+    button:hover { background: var(--primary-hover); }
+    .api-links { margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--surface-border); display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--text-muted); }
+    .api-links a { color: var(--primary); text-decoration: none; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 4px 10px; border-radius: 6px; }
+    .api-links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class=\"container\">
+    <header>
+      <div class=\"brand\">
+        <h1>🏥 CarePoint Hospital Management</h1>
+        <p>Enterprise Healthcare Patient System &bull; High-Availability Architecture</p>
+      </div>
+      <div class=\"badge-soc2\">
+        <span class=\"badge-dot\"></span>
+        AWS ALB Healthy &bull; Cloud Security Demo
+      </div>
+    </header>
 
-The infrastructure and deployment workflows implement the core technical controls mandated by **SOC 2 Trust Services Criteria (Security, Availability, and Confidentiality)** and **GDPR** data protection standards, including encryption at rest/in transit, network segmentation, least-privilege IAM, automated daily backups, and policy-as-code security scans.
+    <div class=\"stats-grid\">
+      <div class=\"card\">
+        <div class=\"card-title\">Active Patients</div>
+        <div class=\"card-value\">{{PATIENT_COUNT}}</div>
+        <div class=\"card-hint\">Real-time admitted cases</div>
+      </div>
+      <div class=\"card\">
+        <div class=\"card-title\">Cloud Infrastructure</div>
+        <div class=\"card-value\" style=\"color: #60a5fa; font-size: 20px;\">AWS Multi-AZ</div>
+        <div class=\"card-hint\">Private VPC &bull; Encrypted RDS</div>
+      </div>
+      <div class=\"card\">
+        <div class=\"card-title\">Security & WAF</div>
+        <div class=\"card-value\" style=\"color: #34d399; font-size: 20px;\">Shielded</div>
+        <div class=\"card-hint\">OWASP Top 10 + AES-256</div>
+      </div>
+      <div class=\"card\">
+        <div class=\"card-title\">Microservice Health</div>
+        <div class=\"card-value\" style=\"color: #10b981;\">200 OK</div>
+        <div class=\"card-hint\">ALB Target Group Attached</div>
+      </div>
+    </div>
 
----
+    <div class=\"card\">
+      <div class=\"section-title\">
+        <span>Patient Directory</span>
+        <span style=\"font-size: 12px; color: var(--text-muted); font-weight: normal;\">Live In-Memory Registry</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Patient Name</th>
+            <th>Age</th>
+            <th>Department / Diagnosis</th>
+            <th>Ward/Room</th>
+            <th>Clinical Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{PATIENT_ROWS}}
+        </tbody>
+      </table>
+    </div>
 
-## 🏛️ Architecture Overview
+    <div class=\"card form-container\">
+      <div class=\"section-title\">
+        <span>Admit New Patient</span>
+        <span style=\"font-size: 12px; color: var(--text-muted); font-weight: normal;\">Immediate Registration</span>
+      </div>
+      <form method=\"POST\" action=\"/patients/add\">
+        <div class=\"form-grid\">
+          <input type=\"text\" name=\"name\" placeholder=\"Full Name (e.g. Maya Suresh)\" required />
+          <input type=\"number\" name=\"age\" placeholder=\"Age\" min=\"1\" max=\"120\" required />
+          <input type=\"text\" name=\"diagnosis\" placeholder=\"Diagnosis / Department\" required />
+          <input type=\"text\" name=\"room\" placeholder=\"Room (e.g. Ward-4C)\" required />
+          <button type=\"submit\">+ Admit Patient</button>
+        </div>
+      </form>
+    </div>
 
-The platform isolates sensitive application and database workloads inside private subnets across multiple Availability Zones, enforcing traffic inspection through AWS WAF v2 and an Application Load Balancer (ALB).
+    <div class=\"api-links\">
+      <span>DevOps ALB Probes & APIs:</span>
+      <a href=\"/health\" target=\"_blank\">GET /health</a>
+      <a href=\"/patients\" target=\"_blank\">GET /patients (JSON)</a>
+      <a href=\"/api/info\" target=\"_blank\">GET /api/info</a>
+    </div>
+  </div>
+</body>
+</html>
+"""
 
-### Architecture Diagram (Mermaid)
 
-```mermaid
-flowchart TD
-    subgraph Internet ["🌐 Public Internet"]
-        Users["End Users & Health Admins"]
-    end
+def _generate_html() -> str:
+    rows = []
+    for patient in PATIENTS:
+        status = patient.get("status", "Admitted")
+        pill_class = {
+            "Stable": "pill-stable",
+            "Admitted": "pill-admitted",
+            "Observation": "pill-obs",
+            "Recovering": "pill-rec",
+        }.get(status, "pill-admitted")
 
-    subgraph Perimeter ["🛡️ Edge & Perimeter Security Layer"]
-        R53["AWS Route 53 (DNS)"]
-        CF["CloudFront CDN (Origin Access Control / HTTPS Only)"]
-        WAF["AWS WAF v2 (SQLi & Common Rule Sets)"]
-    end
+        row = f"""<tr>
+          <td><strong>#{patient['id']}</strong></td>
+          <td>{patient['name']}</td>
+          <td>{patient['age']} yrs</td>
+          <td>{patient['diagnosis']}</td>
+          <td><code>{patient.get('room', 'General')}</code></td>
+          <td><span class=\"pill {pill_class}\">{status}</span></td>
+        </tr>"""
+        rows.append(row)
 
-    subgraph VPC ["🔒 AWS VPC (10.0.0.0/16 — Multi-AZ)"]
-        subgraph PublicSubnets ["Public Subnets (AZ1 & AZ2)"]
-            ALB["Application Load Balancer (ALB)"]
-            NAT["NAT Gateway"]
-        end
+    html = HTML_TEMPLATE.replace("{{PATIENT_COUNT}}", str(len(PATIENTS)))
+    html = html.replace("{{PATIENT_ROWS}}", "\n".join(rows))
+    return html
 
-        subgraph PrivateAppSubnets ["Private App Subnets"]
-            EC2["EC2 Instance (Ubuntu 22.04 LTS)\nDocker Runtime (Non-Root User)"]
-        end
 
-        subgraph PrivateDBSubnets ["Private Database Subnets (Isolated)"]
-            RDS[("Amazon RDS MySQL 8.0\nStorage Encrypted (KMS / AES-256)")]
-        end
-    end
+def _get_expected_credentials() -> tuple[str, str]:
+    username = os.getenv("APP_USERNAME", "admin")
+    password = os.getenv("APP_PASSWORD", "ChangeMePlease")
+    return username, password
 
-    subgraph Operations ["⚙️ Operational & Security Controls"]
-        S3[("S3 Bucket (Backups & Static)\nSSE-AES256 + Public Access Block")]
-        CW["Amazon CloudWatch\nAlarms, Metrics & 30-Day Logs"]
-        IAM["IAM Role & Instance Profile\nLeast-Privilege Scoped"]
-        BackupScript["Bash Automation\nEncrypted MySQL Snapshots to S3"]
-    end
 
-    subgraph Pipeline ["🚀 DevSecOps Pipeline (GitHub Actions)"]
-        GHA["Linting: Flake8, ShellCheck\nIaC Scans: tfsec, Checkov\nCode Gate: SonarQube Cloud\nDocker: Build & Health Test\nIaC: Terraform Plan (Dry-Run)"]
-    end
+def _check_basic_auth(handler) -> bool:
+    if handler.path in ("/health", "/api/info"):
+        return True
 
-    Users -->|HTTPS / 443| R53
-    R53 --> CF
-    CF --> WAF
-    WAF --> ALB
-    ALB -->|HTTP / 8000| EC2
-    EC2 -->|MySQL / 3306| RDS
-    EC2 -->|Audit Logs| CW
-    EC2 -.->|Backup Snapshots| S3
-    EC2 -->|Outbound Updates Only| NAT
-    Pipeline -.->|Validates & Builds| EC2
-```
+    if handler.path == "/":
+        return True
 
-### Text Flow Diagram
+    auth_header = handler.headers.get("Authorization", "")
+    if not auth_header.startswith("Basic "):
+        handler.send_response(401)
+        handler.send_header("WWW-Authenticate", "Basic realm=\"CarePoint\"")
+        handler.send_header("Content-Type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(json.dumps({"error": "Authentication required"}).encode("utf-8"))
+        return False
 
-```text
-[End User] 
-    │ (HTTPS)
-    ▼
-[AWS Route 53] ──► [CloudFront + AWS WAF v2] ──► [Application Load Balancer (Public)]
-                                                              │ (Port 8000)
-                                                              ▼
-                                                   [EC2: Docker App (Private)]
-                                                              │ (Port 3306)
-                                                              ▼
-                                                   [RDS MySQL Encrypted (Private)]
-                                                              │
-                                       ┌──────────────────────┴──────────────────────┐
-                                       ▼                                             ▼
-                          [S3 Encrypted Backups]                         [CloudWatch Logs & Alarms]
-```
+    encoded = auth_header.split(" ", 1)[1].strip()
+    try:
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        username, password = decoded.split(":", 1)
+    except Exception:
+        handler.send_response(401)
+        handler.send_header("WWW-Authenticate", "Basic realm=\"CarePoint\"")
+        handler.send_header("Content-Type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(json.dumps({"error": "Invalid authentication header"}).encode("utf-8"))
+        return False
 
----
+    expected_user, expected_pass = _get_expected_credentials()
+    if username != expected_user or password != expected_pass:
+        handler.send_response(401)
+        handler.send_header("WWW-Authenticate", "Basic realm=\"CarePoint\"")
+        handler.send_header("Content-Type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(json.dumps({"error": "Invalid credentials"}).encode("utf-8"))
+        return False
 
-## 🔒 SOC 2 & Security Control Mapping Table
+    return True
 
-This repository implements technical safeguards corresponding directly to **SOC 2 Type II Trust Services Criteria (Security, Availability, Confidentiality)** and **GDPR** Article 32 requirements.
 
-| Control Principle | SOC 2 Criteria | Technical Implementation Mechanism | Exact Code Reference |
-| :--- | :--- | :--- | :--- |
-| **Encryption at Rest (Database)** | **CC6.1, CC6.7** | AWS KMS customer-managed key encryption for RDS EBS storage (`storage_encrypted = true`). | [`terraform/compute_db.tf`](terraform/compute_db.tf#L87) |
-| **Encryption at Rest (Storage)** | **CC6.1, CC6.7** | S3 bucket server-side encryption via AES-256 (`aws:kms` compatible) with strict Public Access Block. | [`terraform/edge_alb_waf.tf`](terraform/edge_alb_waf.tf#L18-L38) |
-| **Encryption in Transit** | **CC6.6, CC6.7** | CloudFront viewer certificate enforcement (`redirect-to-https`) and ALB SSL/TLS termination. | [`terraform/edge_alb_waf.tf`](terraform/edge_alb_waf.tf#L84) |
-| **Network Isolation & Segmentation** | **CC6.6** | Multi-AZ VPC (`10.0.0.0/16`) with compute and database strictly placed in private subnets with no public IPs. | [`terraform/vpc.tf`](terraform/vpc.tf#L25-L68) |
-| **Least-Privilege Security Groups** | **CC6.6** | Tiered ingress: ALB allows 80/443; EC2 allows 8000 *only* from ALB SG; RDS allows 3306 *only* from EC2 SG. | [`terraform/vpc.tf`](terraform/vpc.tf#L120-L198) |
-| **Layer 7 Threat Mitigation** | **CC6.6, CC7.1** | AWS WAF v2 Web ACL inspecting for SQL Injection (`AWSManagedRulesSQLiRuleSet`) and common OWASP exploits. | [`terraform/edge_alb_waf.tf`](terraform/edge_alb_waf.tf#L107-L140) |
-| **Least-Privilege IAM Access** | **CC6.3** | EC2 IAM role strictly limited to scoped CloudWatch logs and encrypted S3 backup writes (zero `*` admin access). | [`terraform/iam_cloudwatch.tf`](terraform/iam_cloudwatch.tf#L25-L75) |
-| **Non-Root Container Runtime** | **CC6.8** | Hardened multi-stage Dockerfile creating a dedicated `appuser` system group and running as non-root (`USER appuser`). | [`app/Dockerfile`](app/Dockerfile#L8-L12) |
-| **Centralized Audit Logging** | **CC7.2** | 30-day retention CloudWatch log group with RDS general/error/slowquery export streams. | [`terraform/iam_cloudwatch.tf`](terraform/iam_cloudwatch.tf#L81-L86) |
-| **Proactive Operational Monitoring** | **CC7.2, A1.1** | CloudWatch alarms monitoring high CPU utilization (>80%) and ALB 5XX error spikes (>5 errors/interval). | [`terraform/iam_cloudwatch.tf`](terraform/iam_cloudwatch.tf#L95-L135) |
-| **Disaster Recovery & Daily Backups** | **A1.2, A1.3** | Automated Bash snapshot script producing encrypted database dumps pushed daily to S3 with 7-day retention. | [`scripts/linux_health_backup.sh`](scripts/linux_health_backup.sh#L26-L32) |
-| **Static Security & Policy as Code** | **CC7.1** | Automated scanning in CI pipeline using `tfsec`, `Checkov`, `Bandit` (SAST), and `ShellCheck`. | [`.github/workflows/devops-pipeline.yml`](.github/workflows/devops-pipeline.yml#L40-L75) |
+class HospitalHandler(BaseHTTPRequestHandler):
+    """Handles HTTP requests for the Hospital Management Platform."""
 
----
+    def _send_response(self, status: int, content_type: str, body: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        self.end_headers()
+        self.wfile.write(body)
 
-## 🛠️ Tech Stack & Tooling
+    def _send_json(self, status: int, payload: dict) -> None:
+        body = json.dumps(payload, indent=2).encode("utf-8")
+        self._send_response(status, "application/json", body)
 
-* **Cloud Provider:** Amazon Web Services (VPC, ALB, EC2, RDS MySQL, S3, CloudFront, WAF v2, Route 53, CloudWatch, IAM)
-* **Infrastructure as Code (IaC):** Terraform 1.6+ (modular HCL, S3 remote state lock ready)
-* **Containers & Orchestration:** Docker (multi-stage non-root build), Kubernetes (Deployments, ClusterIP, Ingress, Probes)
-* **CI/CD & DevSecOps:** GitHub Actions, Jenkins, SonarQube Cloud, Bandit, ShellCheck, tfsec, Checkov
-* **Backend Application:** Python 3.12 (Healthcare Directory REST API + Web UI Dashboard)
-* **Database:** MySQL 8.0 Engine with Automated Snapshots and KMS Encryption
+    def _send_html(self, status: int, html_str: str) -> None:
+        self._send_response(status, "text/html; charset=utf-8", html_str.encode("utf-8"))
 
----
+    def do_GET(self) -> None:
+        if not _check_basic_auth(self):
+            return
 
-## 🚦 DevSecOps CI/CD Pipeline
+        if self.path == "/health":
+            self._send_json(200, {"status": "healthy", "service": "hospital-management"})
+        elif self.path == "/patients":
+            self._send_json(200, {"patients": PATIENTS, "count": len(PATIENTS)})
+        elif self.path.startswith("/patients/") and self.path != "/patients/add":
+            try:
+                patient_id = int(self.path.split("/")[-1])
+                patient = next((p for p in PATIENTS if p["id"] == patient_id), None)
+                if patient:
+                    self._send_json(200, patient)
+                else:
+                    self._send_json(404, {"error": "Patient not found"})
+            except ValueError:
+                self._send_json(400, {"error": "Invalid patient ID"})
+        elif self.path in ("/", "/dashboard"):
+            self._send_html(200, _generate_html())
+        elif self.path == "/api/info":
+            self._send_json(200, {
+                "service": "Hospital Management System",
+                "version": "1.1.0",
+                "endpoints": ["/", "/health", "/patients", "/patients/<id>", "/api/info"],
+                "compliance": ["SOC2-inspired controls", "HIPAA-demo", "GDPR-demo"],
+            })
+        else:
+            self._send_json(404, {"error": "Endpoint not found"})
 
-The GitHub Actions workflow (`.github/workflows/devops-pipeline.yml`) executes on every push and pull request:
+    def do_POST(self) -> None:
+        if not _check_basic_auth(self):
+            return
 
-```text
-┌──────────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐
-│  1. Lint & Validate  │     │ 2. SonarQube Gate    │     │ 3. Docker Build/Test │     │  4. Terraform Plan   │
-│                      │     │                      │     │                      │     │                      │
-│ • Flake8 & Bandit    │────►│ • Static Analysis    │────►│ • Multi-Stage Build  │────►│ • OIDC AWS Auth      │
-│ • ShellCheck         │     │ • OWASP Code Scan    │     │ • Probe /health      │     │ • Dry-Run Plan Only  │
-│ • tfsec & Checkov    │     │ • Quality Gate Check │     │ • Push to DockerHub  │     │ • Never Auto-Apply   │
-└──────────────────────┘     └──────────────────────┘     └──────────────────────┘     └──────────────────────┘
-```
+        if self.path in ("/patients/add", "/patients"):
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(content_length).decode("utf-8")
 
-1. **Lint & Security Scans:**
-   - `flake8`: Python syntax and PEP8 compliance.
-   - `bandit`: Static Application Security Testing (SAST) for Python vulnerabilities.
-   - `shellcheck`: Bash script validation for POSIX safety.
-   - `terraform fmt & validate`: HCL syntax and internal consistency.
-   - `tfsec` & `checkov`: Infrastructure-as-Code (IaC) policy and compliance scans detecting misconfigurations.
-2. **SonarQube Cloud Security Gate:**
-   - Full static code analysis covering bugs, vulnerabilities, and security hotspots.
-3. **Container Build & Live Health Probe:**
-   - Multi-stage Docker image build.
-   - Spins up container in isolated test runner and validates HTTP `200 OK` on `/health`.
-4. **Terraform Plan (Dry-Run):**
-   - Connects to AWS via secure GitHub OpenID Connect (OIDC) without long-lived access keys.
-   - Runs `terraform plan` to verify resource graph integrity without applying charges.
+                content_type = self.headers.get("Content-Type", "")
+                if "application/json" in content_type:
+                    data = json.loads(body)
+                else:
+                    parsed = urllib.parse.parse_qs(body)
+                    data = {k: v[0] for k, v in parsed.items()}
 
----
+                new_id = max([p["id"] for p in PATIENTS], default=0) + 1
+                new_patient = {
+                    "id": new_id,
+                    "name": data.get("name", "Unknown"),
+                    "age": int(data.get("age", 0)),
+                    "diagnosis": data.get("diagnosis", "General Checkup"),
+                    "room": data.get("room", "Ward-Gen"),
+                    "status": "Admitted",
+                }
+                PATIENTS.append(new_patient)
 
-## 💻 Local Quickstart
+                if "application/json" in content_type:
+                    self._send_json(201, {"status": "created", "patient": new_patient})
+                else:
+                    self.send_response(303)
+                    self.send_header("Location", "/")
+                    self.end_headers()
+            except Exception as exc:
+                self._send_json(400, {"error": f"Invalid request: {str(exc)}"})
+        else:
+            self._send_json(404, {"error": "Endpoint not found"})
 
-### 1. Run the Web Dashboard & API Locally (Python Standard Library)
+    def log_message(self, fmt, *args):
+        pass
 
-No dependencies required:
 
-```bash
-# Clone the repository
-git clone https://github.com/kris-2000/aws-terraform-soc2-devops-platform.git
-cd aws-terraform-soc2-devops-platform
+def app(environ, start_response):
+    path = environ.get("PATH_INFO", "/")
+    method = environ.get("REQUEST_METHOD", "GET")
 
-# Run the application server
-python app/app.py
-```
+    auth_header = environ.get("HTTP_AUTHORIZATION", "")
+    if path not in ("/health", "/api/info") and path != "/":
+        if not auth_header.startswith("Basic "):
+            body = json.dumps({"error": "Authentication required"}).encode("utf-8")
+            headers = [
+                ("Content-Type", "application/json"),
+                ("Content-Length", str(len(body))),
+                ("WWW-Authenticate", 'Basic realm="CarePoint"'),
+                ("Strict-Transport-Security", "max-age=31536000; includeSubDomains"),
+            ]
+            start_response("401 Unauthorized", headers)
+            return [body]
 
-Open your browser:
-* **Interactive Web Dashboard:** [http://localhost:8000/](http://localhost:8000/)
-* **ALB Health Probe (JSON):** [http://localhost:8000/health](http://localhost:8000/health)
-* **Patient Records API (JSON):** [http://localhost:8000/patients](http://localhost:8000/patients)
+    if path == "/health":
+        body = json.dumps({"status": "healthy", "service": "hospital-management"}).encode("utf-8")
+        headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
+        start_response("200 OK", headers)
+        return [body]
 
-### 2. Run with Docker (Production Container Runtime)
+    if path == "/patients":
+        body = json.dumps({"patients": PATIENTS, "count": len(PATIENTS)}).encode("utf-8")
+        headers = [("Content-Type", "application/json"), ("Content-Length", str(len(body)))]
+        start_response("200 OK", headers)
+        return [body]
 
-```bash
-# Build the hardened non-root container
-docker build -t hospital-app app/
+    html = _generate_html().encode("utf-8")
+    headers = [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(html)))]
+    start_response("200 OK", headers)
+    return [html]
 
-# Run container on port 8000
-docker run -d --name hospital-service -p 8000:8000 hospital-app
 
-# Verify health status
-curl http://localhost:8000/health
-```
+if __name__ == "__main__":
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    server = HTTPServer((host, port), HospitalHandler)
+    print(f"Hospital Management UI & API running on http://localhost:{port}")
+    server.serve_forever()
 
-### 3. Run the Automated Compliance Scanner
-
-Audit existing AWS resources against encryption, public exposure, and IAM least-privilege standards:
-
-```bash
-python scripts/soc2_gdpr_audit.py
-```
-
-### 4. Validate Terraform IaC
-
-```bash
-cd terraform
-terraform init -backend=false
-terraform validate
-```
-
----
-
-## 📂 Repository Structure
-
-```text
-aws-terraform-soc2-devops-platform/
-├── app/
-│   ├── app.py                  # Healthcare Web UI dashboard + REST API (WSGI ready)
-│   ├── requirements.txt        # Gunicorn and production runtime dependencies
-│   └── Dockerfile              # Multi-stage hardened non-root container build
-├── terraform/
-│   ├── main.tf                 # Provider configurations, variables, and outputs
-│   ├── vpc.tf                  # Multi-AZ VPC, subnets, NAT, and security groups
-│   ├── edge_alb_waf.tf         # Route 53, CloudFront OAC, S3, ALB, and AWS WAF v2
-│   ├── compute_db.tf           # Private EC2 runtime, RDS MySQL (KMS Encrypted)
-│   └── iam_cloudwatch.tf       # Least-privilege IAM roles and CloudWatch alarms/logs
-├── k8s/
-│   └── deployment-ingress.yaml # Production Kubernetes Deployment, Service, and Ingress
-├── scripts/
-│   ├── linux_health_backup.sh  # Operational Bash script for health checks and S3 backups
-│   └── soc2_gdpr_audit.py      # Automated Python audit scanner for AWS compliance
-├── .github/workflows/
-│   └── devops-pipeline.yml     # 4-stage DevSecOps CI/CD pipeline (tfsec, Checkov, SonarQube)
-├── Jenkinsfile                 # Declarative multi-stage Jenkins pipeline
-└── docs/
-    └── RUNBOOK_SOC2_GDPR.md    # Incident response, runbooks, and audit documentation
-```
-
----
-
-## 👤 Author
-
-**KRISHNA PRASAD S**
-* **GitHub:** [@kris-2000](https://github.com/kris-2000)
-* **Role Focus:** Cloud Engineering, DevOps (AWS, Terraform, Kubernetes, CI/CD, DevSecOps)
